@@ -121,8 +121,8 @@ func (img *image) Line(x0, y0, x1, y1 int, c color) {
 
 	dx := x1 - x0
 	dy := y1 - y0
-	derr := math.Abs(float64(dy) / float64(dx))
-	err := float64(0)
+	derr2 := int(math.Abs(float64(dy)) * 2)
+	err2 := 0
 
 	y := y0
 
@@ -133,14 +133,14 @@ func (img *image) Line(x0, y0, x1, y1 int, c color) {
 			img.Set(uint(x), uint(y), c)
 		}
 
-		err += derr
-		if err > 0.5 {
+		err2 += derr2
+		if err2 > dx {
 			if y1 > y0 {
 				y += 1
 			} else {
 				y -= 1
 			}
-			err -= 1.0
+			err2 -= (dx * 2)
 		}
 	}
 }
@@ -148,14 +148,16 @@ func (img *image) Line(x0, y0, x1, y1 int, c color) {
 //------------------------------------------------------------------------------
 
 func main() {
-	//defer profile.Start(profile.CPUProfile).Stop()
+	//defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
 
 	img := MakeImage(100, 100)
 	img.Fill(0x000000FF)
 
+	//for i := 0; i < 100000; i++ {
 	img.Line(13, 20, 80, 40, 0xFFFFFFFF)
 	img.Line(20, 13, 40, 80, 0xFF0000FF)
 	img.Line(80, 40, 13, 20, 0xFF0000FF)
+	//}
 
 	img.WritePng("out.png")
 }

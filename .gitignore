@@ -1,3 +1,4 @@
 tiny-renderer
 tiny-renderer.exe
 out.png
+*.pprof
