@@ -1,13 +1,14 @@
 package main
 
 import (
-	"fmt"
 	goimg "image"
 	gocolor "image/color"
 	"image/png"
 	"math"
 	"os"
 )
+
+//------------------------------------------------------------------------------
 
 type color uint32
 
@@ -29,10 +30,20 @@ func (c *color) Set(r, g, b, a uint32) {
 	*c = color(t)
 }
 
+//------------------------------------------------------------------------------
+
 type image struct {
 	Pixels []color
 	Width  uint
 	Height uint
+}
+
+func MakeImage(width, height uint) *image {
+	var img image
+	img.Pixels = make([]color, width*height)
+	img.Width = width
+	img.Height = height
+	return &img
 }
 
 func (img image) Get(x, y uint) color {
@@ -44,7 +55,7 @@ func (img *image) Set(x, y uint, c color) {
 }
 
 func (img *image) FlipVertical() {
-	for y := uint(0); y < img.Height; y++ {
+	for y := uint(0); y < (img.Height/2)+1; y++ {
 		y2 := (img.Height - 1) - y
 		for x := uint(0); x < img.Width; x++ {
 			c1 := img.Get(x, y)
@@ -63,71 +74,71 @@ func (img *image) Fill(c color) {
 	}
 }
 
-func MakeImage(width, height uint) *image {
-	var img image
-	img.Pixels = make([]color, width*height)
-	img.Width = width
-	img.Height = height
-	return &img
+func (src *image) WritePng(filename string) error {
+	img := goimg.NewRGBA(goimg.Rectangle{goimg.Point{0, 0}, goimg.Point{int(src.Width), int(src.Height)}})
+
+	for y := uint(0); y < src.Height; y++ {
+		y2 := (src.Height - 1) - y
+		for x := uint(0); x < src.Width; x++ {
+			r, g, b, a := src.Get(x, y).Rgba()
+			img.Set(int(x), int(y2), gocolor.RGBA{uint8(r), uint8(g), uint8(b), uint8(a)})
+		}
+	}
+
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	png.Encode(file, img)
+	file.Close()
+
+	return nil
 }
 
 func (img *image) Line(x0, y0, x1, y1 uint, c color) {
+	x0f, y0f, x1f, y1f := float64(x0), float64(y0), float64(x1), float64(y1)
 	steep := false
-	var tint uint
 	var t float64
 
-	if math.Abs(float64(x0-x1)) < math.Abs(float64(y0-y1)) {
-		tint = x0
-		x0 = y0
-		y0 = tint
-		tint = x1
-		x1 = y1
-		y1 = tint
+	if math.Abs(x0f-x1f) < math.Abs(y0f-y1f) {
+		t = x0f
+		x0f = y0f
+		y0f = t
+		t = x1f
+		x1f = y1f
+		y1f = t
 		steep = true
 	}
 
-	if x0 > x1 {
-		tint = x0
-		x0 = x1
-		x1 = tint
-		tint = y0
-		y0 = y1
-		y1 = tint
+	if x0f > x1f {
+		t = x0f
+		x0f = x1f
+		x1f = t
+		t = y0f
+		y0f = y1f
+		y1f = t
 	}
 
-	for x := x0; x <= x1; x++ {
-		t = float64(x-x0) / float64(x1-x0)
-		y := float64(y0)*(1.0-t) + float64(y1)*t
+	for x := x0f; x <= x1f; x++ {
+		t = (x - x0f) / (x1f - x0f)
+		y := y0f*(1.0-t) + y1f*t
 
 		if steep {
-			img.Set(uint(y), x, c)
+			img.Set(uint(y), uint(x), c)
 		} else {
-			img.Set(x, uint(y), c)
+			img.Set(uint(x), uint(y), c)
 		}
 	}
 }
 
+//------------------------------------------------------------------------------
+
 func main() {
 	img := MakeImage(100, 100)
-	img.Fill(0x00000000)
+	img.Fill(0x000000FF)
 	img.Line(13, 20, 80, 40, 0xFFFFFFFF)
 	img.Line(20, 13, 40, 80, 0xFF0000FF)
 	img.Line(80, 40, 13, 20, 0xFF0000FF)
-	img.FlipVertical()
 
-	goImg := goimg.NewRGBA(goimg.Rectangle{goimg.Point{0, 0}, goimg.Point{100, 100}})
-	for y := uint(0); y < img.Height; y++ {
-		for x := uint(0); x < img.Width; x++ {
-			r, g, b, a := img.Get(x, y).Rgba()
-			goImg.Set(int(x), int(y), gocolor.RGBA{uint8(r), uint8(g), uint8(b), uint8(a)})
-		}
-	}
-
-	file, err := os.OpenFile("out.png", os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		panic(err)
-	}
-	png.Encode(file, goImg)
-	file.Close()
-	fmt.Println("hi")
+	img.WritePng("out.png")
 }
