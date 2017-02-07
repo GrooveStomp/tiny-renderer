@@ -1,47 +1,133 @@
 package main
 
 import (
-	"image"
 	"fmt"
-	"image/color"
+	goimg "image"
+	gocolor "image/color"
 	"image/png"
+	"math"
 	"os"
 )
 
-func Set(img *image.RGBA, x, y int, c color.Color) error {
-	// Rectangle returns color.Opaque for in-bounds pixels, and color.Transparent
-	// for out-of-bounds pixels.
-	if img.Rect.At(x,y) == color.Transparent {
-		return fmt.Errorf("Pixel at (%v, %v) is out-of-bounds", x, y)
+type color uint32
+
+func (c color) Rgba() (uint32, uint32, uint32, uint32) {
+	r, g, b, a := uint32(c), uint32(c), uint32(c), uint32(c)
+	r >>= 24
+	g >>= 16
+	b >>= 8
+
+	return r, g, b, a
+}
+
+func (c *color) Set(r, g, b, a uint32) {
+	t := r<<24 |
+		g<<16 |
+		b<<8 |
+		a
+
+	*c = color(t)
+}
+
+type image struct {
+	Pixels []color
+	Width  uint
+	Height uint
+}
+
+func (img image) Get(x, y uint) color {
+	return img.Pixels[y*img.Width+x]
+}
+
+func (img *image) Set(x, y uint, c color) {
+	img.Pixels[y*img.Width+x] = c
+}
+
+func (img *image) FlipVertical() {
+	for y := uint(0); y < img.Height; y++ {
+		y2 := (img.Height - 1) - y
+		for x := uint(0); x < img.Width; x++ {
+			c1 := img.Get(x, y)
+			c2 := img.Get(x, y2)
+			img.Set(x, y, c2)
+			img.Set(x, y, c1)
+		}
+	}
+}
+
+func (img *image) Fill(c color) {
+	for y := uint(0); y < img.Height; y++ {
+		for x := uint(0); x < img.Width; x++ {
+			img.Set(x, y, c)
+		}
+	}
+}
+
+func MakeImage(width, height uint) *image {
+	var img image
+	img.Pixels = make([]color, width*height)
+	img.Width = width
+	img.Height = height
+	return &img
+}
+
+func (img *image) Line(x0, y0, x1, y1 uint, c color) {
+	steep := false
+	var tint uint
+	var t float64
+
+	if math.Abs(float64(x0-x1)) < math.Abs(float64(y0-y1)) {
+		tint = x0
+		x0 = y0
+		y0 = tint
+		tint = x1
+		x1 = y1
+		y1 = tint
+		steep = true
 	}
 
-	// Pix holds the image's pixels, in R, G, B, A order. The pixel at
-	// (x, y) starts at Pix[(y-Rect.Min.Y)*Stride + (x-Rect.Min.X)*4].
-	index := (y - img.Rect.Min.Y) * img.Stride + (x - img.Rect.Min.X) * 4
-	r,g,b,a := c.RGBA()
-	img.Pix[index + 0] = uint8(r)
-	img.Pix[index + 1] = uint8(g)
-	img.Pix[index + 2] = uint8(b)
-	img.Pix[index + 3] = uint8(a)
+	if x0 > x1 {
+		tint = x0
+		x0 = x1
+		x1 = tint
+		tint = y0
+		y0 = y1
+		y1 = tint
+	}
 
-	return nil
+	for x := x0; x <= x1; x++ {
+		t = float64(x-x0) / float64(x1-x0)
+		y := float64(y0)*(1.0-t) + float64(y1)*t
+
+		if steep {
+			img.Set(uint(y), x, c)
+		} else {
+			img.Set(x, uint(y), c)
+		}
+	}
 }
 
 func main() {
-	topLeft := image.Point{0,0}
-	bottomRight := image.Point{5,5}
-	img := image.NewRGBA(image.Rectangle{topLeft, bottomRight})
+	img := MakeImage(100, 100)
+	img.Fill(0x00000000)
+	img.Line(13, 20, 80, 40, 0xFFFFFFFF)
+	img.Line(20, 13, 40, 80, 0xFF0000FF)
+	img.Line(80, 40, 13, 20, 0xFF0000FF)
+	img.FlipVertical()
 
-	err := Set(img, 4,4, color.RGBA{0xFF, 0xFF, 0xFF, 0xFF})
-	if err != nil {
-		panic(err)
+	goImg := goimg.NewRGBA(goimg.Rectangle{goimg.Point{0, 0}, goimg.Point{100, 100}})
+	for y := uint(0); y < img.Height; y++ {
+		for x := uint(0); x < img.Width; x++ {
+			r, g, b, a := img.Get(x, y).Rgba()
+			goImg.Set(int(x), int(y), gocolor.RGBA{uint8(r), uint8(g), uint8(b), uint8(a)})
+		}
 	}
 
 	file, err := os.OpenFile("out.png", os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		panic(err)
 	}
-
-	png.Encode(file, img)
+	png.Encode(file, goImg)
 	file.Close()
+	fmt.Println("hi")
 }
