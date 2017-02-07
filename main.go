@@ -6,6 +6,7 @@ import (
 	"image/png"
 	"math"
 	"os"
+	//"github.com/pkg/profile"
 )
 
 //------------------------------------------------------------------------------
@@ -95,38 +96,51 @@ func (src *image) WritePng(filename string) error {
 	return nil
 }
 
-func (img *image) Line(x0, y0, x1, y1 uint, c color) {
-	x0f, y0f, x1f, y1f := float64(x0), float64(y0), float64(x1), float64(y1)
+func (img *image) Line(x0, y0, x1, y1 int, c color) {
 	steep := false
-	var t float64
+	var t int
 
-	if math.Abs(x0f-x1f) < math.Abs(y0f-y1f) {
-		t = x0f
-		x0f = y0f
-		y0f = t
-		t = x1f
-		x1f = y1f
-		y1f = t
+	if math.Abs(float64(x0-x1)) < math.Abs(float64(y0-y1)) {
+		t = x0
+		x0 = y0
+		y0 = t
+		t = x1
+		x1 = y1
+		y1 = t
 		steep = true
 	}
 
-	if x0f > x1f {
-		t = x0f
-		x0f = x1f
-		x1f = t
-		t = y0f
-		y0f = y1f
-		y1f = t
+	if x0 > x1 {
+		t = x0
+		x0 = x1
+		x1 = t
+		t = y0
+		y0 = y1
+		y1 = t
 	}
 
-	for x := x0f; x <= x1f; x++ {
-		t = (x - x0f) / (x1f - x0f)
-		y := y0f*(1.0-t) + y1f*t
+	dx := x1 - x0
+	dy := y1 - y0
+	derr := math.Abs(float64(dy) / float64(dx))
+	err := float64(0)
 
+	y := y0
+
+	for x := x0; x <= x1; x++ {
 		if steep {
 			img.Set(uint(y), uint(x), c)
 		} else {
 			img.Set(uint(x), uint(y), c)
+		}
+
+		err += derr
+		if err > 0.5 {
+			if y1 > y0 {
+				y += 1
+			} else {
+				y -= 1
+			}
+			err -= 1.0
 		}
 	}
 }
@@ -134,8 +148,11 @@ func (img *image) Line(x0, y0, x1, y1 uint, c color) {
 //------------------------------------------------------------------------------
 
 func main() {
+	//defer profile.Start(profile.CPUProfile).Stop()
+
 	img := MakeImage(100, 100)
 	img.Fill(0x000000FF)
+
 	img.Line(13, 20, 80, 40, 0xFFFFFFFF)
 	img.Line(20, 13, 40, 80, 0xFF0000FF)
 	img.Line(80, 40, 13, 20, 0xFF0000FF)
