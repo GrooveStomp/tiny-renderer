@@ -1,12 +1,14 @@
 package main
 
 import (
+	"fmt"
+	obj "github.com/GrooveStomp/tiny-renderer/obj-loader"
 	goimg "image"
 	gocolor "image/color"
 	"image/png"
 	"math"
 	"os"
-	//"github.com/pkg/profile"
+	// "github.com/pkg/profile"
 )
 
 //------------------------------------------------------------------------------
@@ -52,6 +54,11 @@ func (img image) Get(x, y uint) color {
 }
 
 func (img *image) Set(x, y uint, c color) {
+	if x >= img.Width {
+		panic(fmt.Sprintf("x(%v) is out of range!", x))
+	} else if y >= img.Height {
+		panic(fmt.Sprintf("y(%v) is out of range!", y))
+	}
 	img.Pixels[y*img.Width+x] = c
 }
 
@@ -97,6 +104,16 @@ func (src *image) WritePng(filename string) error {
 }
 
 func (img *image) Line(x0, y0, x1, y1 int, c color) {
+	if x0 < 0 || x0 >= int(img.Width) {
+		panic(fmt.Sprintf("x0(%v) is out of range!", x0))
+	} else if x1 < 0 || x1 >= int(img.Width) {
+		panic(fmt.Sprintf("x1(%v) is out of range!", x1))
+	} else if y0 < 0 || y0 >= int(img.Height) {
+		panic(fmt.Sprintf("y0(%v) is out of range!", y0))
+	} else if y1 < 0 || y1 >= int(img.Height) {
+		panic(fmt.Sprintf("y1(%v) is out of range!", y1))
+	}
+
 	steep := false
 	var t int
 
@@ -150,14 +167,28 @@ func (img *image) Line(x0, y0, x1, y1 int, c color) {
 func main() {
 	//defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
 
-	img := MakeImage(100, 100)
+	width := uint(1000)
+	height := uint(1000)
+
+	img := MakeImage(width, height)
 	img.Fill(0x000000FF)
 
-	//for i := 0; i < 100000; i++ {
-	img.Line(13, 20, 80, 40, 0xFFFFFFFF)
-	img.Line(20, 13, 40, 80, 0xFF0000FF)
-	img.Line(80, 40, 13, 20, 0xFF0000FF)
-	//}
+	model := obj.NewModel()
+	model.ReadFromFile("african_head.obj")
+
+	for i := 0; i < len(model.Faces); i++ {
+		face := model.Faces[i]
+		for j := 0; j < 3; j++ {
+			v0 := model.Vertices[face[j]-1]
+			v1 := model.Vertices[face[(j+1)%3]-1]
+
+			x0 := (v0.X + 1) * (float64(width-1) / 2)
+			y0 := (v0.Y + 1) * (float64(height-1) / 2)
+			x1 := (v1.X + 1) * (float64(width-1) / 2)
+			y1 := (v1.Y + 1) * (float64(height-1) / 2)
+			img.Line(int(x0), int(y0), int(x1), int(y1), 0xFFFFFFFF)
+		}
+	}
 
 	img.WritePng("out.png")
 }
