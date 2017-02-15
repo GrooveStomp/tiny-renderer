@@ -15,6 +15,27 @@ type Vertex struct {
 	Z float64
 }
 
+func Subtract(a, b Vertex) Vertex {
+	x := a.X - b.X
+	y := a.Y - b.Y
+	z := a.Z - b.Z
+	return Vertex{x, y, z}
+}
+
+func Add(a, b Vertex) Vertex {
+	x := a.X + b.X
+	y := a.Y + b.Y
+	z := a.Z + b.Z
+	return Vertex{x, y, z}
+}
+
+func DotProduct(v Vertex, f float64) Vertex {
+	x := v.X * f
+	y := v.Y * f
+	z := v.Z * f
+	return Vertex{x, y, z}
+}
+
 type Model struct {
 	Vertices []Vertex
 	Faces    [][3]uint
