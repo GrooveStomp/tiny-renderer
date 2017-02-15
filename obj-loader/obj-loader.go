@@ -36,6 +36,13 @@ func DotProduct(v Vertex, f float64) Vertex {
 	return Vertex{x, y, z}
 }
 
+func CrossProduct(a, b Vertex) Vertex {
+	x := a.Y * b.Z - a.Z * b.Y
+	y := a.Z * b.X - a.X * b.Z
+	z := a.X * b.Y - a.Y * b.X
+	return Vertex{x, y, z}
+}
+
 type Model struct {
 	Vertices []Vertex
 	Faces    [][3]uint

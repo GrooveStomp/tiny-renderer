@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"math"
 	"os"
+	"sort"
 	// "github.com/pkg/profile"
 )
 
@@ -163,50 +164,26 @@ func (img *image) Line(x0, y0, x1, y1 int, c color) {
 }
 
 func (img *image) Triangle(t Triangle, c color) {
-	v0, v1, v2 := t.v0, t.v1, t.v2
+	clamp   := obj.Vertex{float64(img.Width - 1), float64(img.Height - 1), float64(0)}
 
-	swap := func(v0, v1 *obj.Vertex) {
-		t := obj.Vertex{v0.X, v0.Y, v0.Z}
-		v0.X = v1.X
-		v0.Y = v1.Y
-		v0.Z = v1.Z
-		v1.X = t.X
-		v1.Y = t.Y
-		v1.Z = t.Z
-	}
+	xs := []float64{t.v0.X, t.v1.X, t.v2.X, 0, float64(img.Width - 1)}
+	ys := []float64{t.v0.Y, t.v1.Y, t.v2.Y, 0, float64(img.Height - 1)}
 
-	if v0.Y > v1.Y { swap(&v0, &v1) }
-	if v0.Y > v2.Y { swap(&v0, &v2) }
-	if v1.Y > v2.Y { swap(&v1, &v2) }
+	sort.Float64s(xs)
+	sort.Float64s(ys)
 
-	// img.Line(int(v0.X), int(v0.Y), int(v1.X), int(v1.Y), 0x00FF00FF)
-	// img.Line(int(v1.X), int(v1.Y), int(v2.X), int(v2.Y), 0x00FF00FF)
-	// img.Line(int(v2.X), int(v2.Y), int(v0.X), int(v0.Y), 0xFF0000FF)
+	bboxMin := obj.Vertex{math.Max(0, xs[0]), math.Max(0, ys[0]), float64(0)}
+	bboxMax := obj.Vertex{math.Min(clamp.X, xs[len(xs) - 1]), math.Min(clamp.Y, ys[len(ys) - 1]), float64(0)}
 
-	totalHeight := v2.Y - v0.Y
-
-	for y := v0.Y; y < v1.Y; y++ {
-		segmentHeight := v1.Y - v0.Y + 1
-		alpha := (y - v0.Y) / totalHeight
-		beta := (y - v0.Y) / segmentHeight
-
-		a := obj.Add(v0, (obj.DotProduct(obj.Subtract(v2, v0), alpha)))
-		b := obj.Add(v0, (obj.DotProduct(obj.Subtract(v1, v0), beta)))
-
-		img.Line(int(a.X), int(y), int(b.X), int(y), c)
-	}
-
-	for y := v1.Y; y < v2.Y; y++ {
-		segmentHeight := v2.Y - v1.Y + 1
-		alpha := (y - v0.Y) / totalHeight
-		beta := (y - v1.Y) / segmentHeight
-
-		a := obj.Add(v0, (obj.DotProduct(obj.Subtract(v2, v0), alpha)))
-		b := obj.Add(v1, (obj.DotProduct(obj.Subtract(v2, v1), beta)))
-
-		if a.X > b.X { swap(&a, &b) }
-
-		img.Line(int(a.X), int(y), int(b.X), int(y), c)
+	var p obj.Vertex
+	for p.X = bboxMin.X; p.X <= bboxMax.X; p.X++ {
+		for p.Y = bboxMin.Y; p.Y <= bboxMax.Y; p.Y++ {
+			bc := t.Barycentric(p)
+			if bc.X < 0 || bc.Y < 0 || bc.Z < 0 {
+				continue
+			}
+			img.Set(uint(p.X), uint(p.Y), c)
+		}
 	}
 }
 
@@ -216,6 +193,16 @@ type Triangle struct {
 	v0 obj.Vertex
 	v1 obj.Vertex
 	v2 obj.Vertex
+}
+
+func (t *Triangle) Barycentric(v obj.Vertex) obj.Vertex {
+	v0 := obj.Vertex{t.v2.X - t.v0.X, t.v1.X - t.v0.X, t.v0.X - v.X}
+	v1 := obj.Vertex{t.v2.Y - t.v0.Y, t.v1.Y - t.v0.Y, t.v0.Y - v.Y}
+	vu := obj.CrossProduct(v0, v1)
+
+	if math.Abs(vu.Y) < 1 { return obj.Vertex{-1,1,1} }
+
+	return obj.Vertex{1.0 - (vu.X + vu.Y) / vu.Z, vu.Y / vu.Z, vu.X / vu.Z}
 }
 
 func main() {
