@@ -7,12 +7,25 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"math"
 )
 
 type Vertex struct {
 	X float64
 	Y float64
 	Z float64
+}
+
+func (v *Vertex) Length() float64 {
+	p := (v.X * v.X) + (v.Y * v.Y) + (v.Z * v.Z)
+	return math.Sqrt(p)
+}
+
+func (v *Vertex) Normalize() {
+	length := v.Length()
+	v.X = v.X / length
+	v.Y = v.Y / length
+	v.Z = v.Z / length
 }
 
 func Subtract(a, b Vertex) Vertex {
@@ -29,11 +42,18 @@ func Add(a, b Vertex) Vertex {
 	return Vertex{x, y, z}
 }
 
-func DotProduct(v Vertex, f float64) Vertex {
+func Multiply(v Vertex, f float64) Vertex {
 	x := v.X * f
 	y := v.Y * f
 	z := v.Z * f
 	return Vertex{x, y, z}
+}
+
+func DotProduct(a, b Vertex) float64 {
+	x := a.X * b.X
+	y := a.Y * b.Y
+	z := a.Z * b.Z
+	return x + y + z
 }
 
 func CrossProduct(a, b Vertex) Vertex {

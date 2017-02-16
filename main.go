@@ -208,36 +208,40 @@ func (t *Triangle) Barycentric(v obj.Vertex) obj.Vertex {
 func main() {
 	//defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
 
-	width := uint(200)
-	height := uint(200)
+	lightDir := obj.Vertex{0, 0, -1}
+
+	width := uint(1000)
+	height := uint(1000)
 
 	img := MakeImage(width, height)
 	img.Fill(0x000000FF)
 
-	t0 := Triangle{obj.Vertex{10, 70, 0}, obj.Vertex{50, 160, 0}, obj.Vertex{70, 80, 0}}
-	t1 := Triangle{obj.Vertex{180, 50, 0}, obj.Vertex{150, 1, 0}, obj.Vertex{70, 180, 0}}
-	t2 := Triangle{obj.Vertex{180, 150, 0}, obj.Vertex{120, 160, 0}, obj.Vertex{130, 180, 0}}
+	model := obj.NewModel()
+	model.ReadFromFile("african_head.obj")
 
-	img.Triangle(t0, 0xFF0000FF)
-	img.Triangle(t1, 0xFFFFFFFF)
-	img.Triangle(t2, 0x00FF00FF)
+	for i := 0; i < len(model.Faces); i++ {
+		face := model.Faces[i]
 
-	// model := obj.NewModel()
-	// model.ReadFromFile("african_head.obj")
+		var screenCoords [3]obj.Vertex
+		var worldCoords [3]obj.Vertex
 
-	// for i := 0; i < len(model.Faces); i++ {
-	// 	face := model.Faces[i]
-	// 	for j := 0; j < 3; j++ {
-	// 		v0 := model.Vertices[face[j]-1]
-	// 		v1 := model.Vertices[face[(j+1)%3]-1]
+		for j := 0; j < 3; j++ {
+			v := model.Vertices[face[j] - 1]
+			x := (v.X + 1) * (float64(width-1) / 2)
+			y := (v.Y + 1) * (float64(height-1) / 2)
+			screenCoords[j] = obj.Vertex{x, y, float64(0)}
+			worldCoords[j] = v
+		}
 
-	// 		x0 := (v0.X + 1) * (float64(width-1) / 2)
-	// 		y0 := (v0.Y + 1) * (float64(height-1) / 2)
-	// 		x1 := (v1.X + 1) * (float64(width-1) / 2)
-	// 		y1 := (v1.Y + 1) * (float64(height-1) / 2)
-	// 		img.Line(int(x0), int(y0), int(x1), int(y1), 0xFFFFFFFF)
-	// 	}
-	// }
+		n := obj.CrossProduct(obj.Subtract(worldCoords[2], worldCoords[0]), obj.Subtract(worldCoords[1], worldCoords[0]))
+		n.Normalize()
+		intensity := obj.DotProduct(n, lightDir)
+		if intensity > 0 {
+			var c color
+			c.Set(uint32(intensity * 255), uint32(intensity * 255), uint32(intensity * 255), 255)
+			img.Triangle(Triangle{screenCoords[0], screenCoords[1], screenCoords[2]}, c)
+		}
+	}
 
 	img.WritePng("out.png")
 }
