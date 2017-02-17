@@ -15,6 +15,42 @@ import (
 
 //------------------------------------------------------------------------------
 
+type zbuffer struct {
+	Buffer []float64
+	Width int
+	Height int
+}
+
+func MakeZBuffer(width, height int) *zbuffer {
+	var buf zbuffer
+	buf.Buffer = make([]float64, width * height)
+	buf.Width = width
+	buf.Height = height
+
+	for y := 0; y < buf.Height; y++ {
+		for x := 0; x < buf.Width; x++ {
+			buf.Set(x, y, math.Inf(-1))
+		}
+	}
+
+	return &buf
+}
+
+func (buf *zbuffer) Get(x, y int) float64 {
+	return buf.Buffer[y*buf.Width+x]
+}
+
+func (buf *zbuffer) Set(x, y int, z float64) {
+	if x >= buf.Width {
+		panic(fmt.Sprintf("x(%v) is out of range!", x))
+	} else if y >= buf.Height {
+		panic(fmt.Sprintf("y(%v) is out of range!", y))
+	}
+	buf.Buffer[y*buf.Width+x] = z
+}
+
+//------------------------------------------------------------------------------
+
 type image struct {
 	Pixels []color.Color
 	Width  int
@@ -154,7 +190,7 @@ func (img *image) Line(x0, y0, x1, y1 int, c color.Color) {
 	}
 }
 
-func (img *image) Triangle(t geometry.Triangle, c0, c1, c2 color.Color) {
+func RasterTriangle(t geometry.Triangle, c color.Color, img *image, zbuf *zbuffer) {
 	v0, v1, v2 := t.V0, t.V1, t.V2
 
 	swap := func(v0, v1 *geometry.Vertex3) {
@@ -195,25 +231,27 @@ func (img *image) Triangle(t geometry.Triangle, c0, c1, c2 color.Color) {
 		barycentricA := t.Barycentric(a)
 		barycentricB := t.Barycentric(b)
 
-		colorA := color.Multiply(c0, barycentricA.X) + color.Multiply(c1, barycentricA.Y) + color.Multiply(c2, barycentricA.Z)
-		colorB := color.Multiply(c0, barycentricB.X) + color.Multiply(c1, barycentricB.Y) + color.Multiply(c2, barycentricB.Z)
+		if barycentricA.X == -1 || barycentricB.X == -1 {
+			;
+		} else {
+			// Now set the Z-Buffer
+			az := (v0.Z * barycentricA.X) + (v1.Z * barycentricA.Y) + (v2.Z * barycentricA.Z)
+			bz := (v0.Z * barycentricB.X) + (v1.Z * barycentricB.Y) + (v2.Z * barycentricB.Z)
 
-		delta := math.Abs(b.X - a.X)
-		for x := a.X; x <= b.X; x++ {
-			tp := (x - a.X)
-			t := tp
-			if tp > 0 {
-				t = tp / delta
-			}
+			delta := math.Abs(b.X - a.X)
 
-			ap := color.Multiply(colorA, float64(1)-t)
-			bp := color.Multiply(colorB, t)
-			lerp := color.Add(ap, bp)
+			for x := a.X; x <= b.X; x++ {
+				tp := (x - a.X)
+				t := tp
+				if tp > 0 {
+					t = tp / delta
+				}
 
-			if barycentricA.X == -1 || barycentricB.X == -1 {
-				img.Set(int(x), int(y), color.White)
-			} else {
-				img.Set(int(x), int(y), lerp)
+				lerp := (az * (float64(1)-t)) + (bz * t)
+				if zbuf.Get(int(x), int(y)) < lerp {
+					zbuf.Set(int(x), int(y), lerp)
+					img.Set(int(x), int(y), c)
+				}
 			}
 		}
 
@@ -235,27 +273,31 @@ func (img *image) Triangle(t geometry.Triangle, c0, c1, c2 color.Color) {
 		barycentricA := t.Barycentric(a)
 		barycentricB := t.Barycentric(b)
 
-		colorA := color.Multiply(c0, barycentricA.X) + color.Multiply(c1, barycentricA.Y) + color.Multiply(c2, barycentricA.Z)
-		colorB := color.Multiply(c0, barycentricB.X) + color.Multiply(c1, barycentricB.Y) + color.Multiply(c2, barycentricB.Z)
+		if barycentricA.X == -1 || barycentricB.X == -1 {
+			;
+		} else {
+			// Now set the Z-Buffer
+			az := (v0.Z * barycentricA.X) + (v1.Z * barycentricA.Y) + (v2.Z * barycentricA.Z)
+			bz := (v0.Z * barycentricB.X) + (v1.Z * barycentricB.Y) + (v2.Z * barycentricB.Z)
 
-		delta := math.Abs(b.X - a.X)
-		for x := a.X; x <= b.X; x++ {
-			tp := (x - a.X)
-			t := tp
-			if tp > 0 {
-				t = tp / delta
-			}
+			delta := math.Abs(b.X - a.X)
 
-			ap := color.Multiply(colorA, float64(1)-t)
-			bp := color.Multiply(colorB, t)
-			lerp := color.Add(ap, bp)
+			for x := a.X; x <= b.X; x++ {
+				tp := (x - a.X)
+				t := tp
+				if tp > 0 {
+					t = tp / delta
+				}
 
-			if barycentricA.X == -1 || barycentricB.X == -1 {
-				img.Set(int(x), int(y), color.White)
-			} else {
-				img.Set(int(x), int(y), lerp)
+				lerp := (az * (float64(1)-t)) + (bz * t)
+				if zbuf.Get(int(x), int(y)) < lerp {
+					zbuf.Set(int(x), int(y), lerp)
+					img.Set(int(x), int(y), c)
+				}
 			}
 		}
+
+		//img.HorizontalLine(int(a.X), int(b.X), int(y), c)
 	}
 }
 
@@ -284,6 +326,8 @@ func main() {
 	img := MakeImage(width, height)
 	img.Fill(0x000000FF)
 
+	zbuf := MakeZBuffer(width, height)
+
 	model := obj.NewModel()
 	model.ReadFromFile(objFile)
 
@@ -297,7 +341,8 @@ func main() {
 			v := model.Vertices[face[j]-1]
 			x := (v.X + 1) * (float64(width-1) / 2)
 			y := (v.Y + 1) * (float64(height-1) / 2)
-			screenCoords[j] = geometry.Vertex3{x, y, float64(0)}
+			z := (v.Z + 1) * (float64(height-1) / 2) // TODO(AARON): Need proper viewing volume.
+			screenCoords[j] = geometry.Vertex3{x, y, z}
 			worldCoords[j] = v
 		}
 
@@ -308,7 +353,7 @@ func main() {
 			var c color.Color
 			c = color.Multiply(color.White, intensity)
 			c.SetAlpha(byte(0xFF))
-			img.Triangle(geometry.Triangle{screenCoords[0], screenCoords[1], screenCoords[2]}, c, c, c)
+			RasterTriangle(geometry.Triangle{screenCoords[0], screenCoords[1], screenCoords[2]}, c, img, zbuf)
 		}
 	}
 
