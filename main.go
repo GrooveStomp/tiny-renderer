@@ -9,104 +9,31 @@ import (
 	"math"
 	"os"
 	// "github.com/pkg/profile"
+	"github.com/GrooveStomp/tiny-renderer/color"
+	"github.com/GrooveStomp/tiny-renderer/geometry"
 )
 
 //------------------------------------------------------------------------------
 
-type color uint32
-
-func NewColor(c color) color {
-	return c
-}
-
-func NewColorRgba(r, g, b, a byte) color {
-	t := uint32(r)<<24 |
-		uint32(g)<<16 |
-		uint32(b)<<8 |
-		uint32(a)
-
-	return color(t)
-}
-
-func NewColorFloat64(r, g, b, a float64) color {
-	r1 := r * float64(255)
-	g1 := g * float64(255)
-	b1 := b * float64(255)
-	a1 := a * float64(255)
-
-	return NewColorRgba(byte(r1), byte(g1), byte(b1), byte(a1))
-}
-
-func (c color) Rgba() (byte, byte, byte, byte) {
-	r, g, b, a := uint32(c), uint32(c), uint32(c), uint32(c)
-	r >>= 24
-	g >>= 16
-	b >>= 8
-
-	return byte(r), byte(g), byte(b), byte(a)
-}
-
-func (c *color) Set(r, g, b, a byte) {
-	new := NewColorRgba(r, g, b, a)
-	*c = new
-}
-
-func (c *color) SetAlpha(a byte) {
-	*c = color(uint32(*c) | uint32(a))
-}
-
-func (c color) Multiply(k float64) color {
-	r, g, b, a := c.Rgba()
-	r = byte(float64(r) * k)
-	g = byte(float64(g) * k)
-	b = byte(float64(b) * k)
-	a = byte(float64(a) * k)
-
-	return NewColorRgba(r, g, b, a)
-}
-
-func (c color) Add(other color) color {
-	r, g, b, a := c.Rgba()
-	r2, g2, b2, a2 := other.Rgba()
-	r += r2
-	g += g2
-	b += b2
-	a += a2
-
-	return NewColorRgba(r, g, b, a)
-}
-
-func (c color) String() string {
-	r, g, b, a := c.Rgba()
-	return fmt.Sprintf("%v,%v,%v,%v", r, g, b, a)
-}
-
-var red color = NewColorFloat64(1.0, 0.0, 0.0, 1.0)
-var green color = NewColorFloat64(0.0, 1.0, 0.0, 1.0)
-var blue color = NewColorFloat64(0.0, 0.0, 1.0, 1.0)
-var white color = NewColorFloat64(1.0, 1.0, 1.0, 1.0)
-
-//------------------------------------------------------------------------------
-
 type image struct {
-	Pixels []color
+	Pixels []color.Color
 	Width  int
 	Height int
 }
 
 func MakeImage(width, height int) *image {
 	var img image
-	img.Pixels = make([]color, width*height)
+	img.Pixels = make([]color.Color, width*height)
 	img.Width = width
 	img.Height = height
 	return &img
 }
 
-func (img image) Get(x, y int) color {
+func (img image) Get(x, y int) color.Color {
 	return img.Pixels[y*img.Width+x]
 }
 
-func (img *image) Set(x, y int, c color) {
+func (img *image) Set(x, y int, c color.Color) {
 	if x >= img.Width {
 		panic(fmt.Sprintf("x(%v) is out of range!", x))
 	} else if y >= img.Height {
@@ -127,7 +54,7 @@ func (img *image) FlipVertical() {
 	}
 }
 
-func (img *image) Fill(c color) {
+func (img *image) Fill(c color.Color) {
 	for y := 0; y < img.Height; y++ {
 		for x := 0; x < img.Width; x++ {
 			img.Set(x, y, c)
@@ -156,7 +83,7 @@ func (src *image) WritePng(filename string) error {
 	return nil
 }
 
-func (img *image) HorizontalLine(x0, x1 int, y int, c color) {
+func (img *image) HorizontalLine(x0, x1 int, y int, c color.Color) {
 	if x0 > x1 {
 		t := x0
 		x0 = x1
@@ -168,7 +95,7 @@ func (img *image) HorizontalLine(x0, x1 int, y int, c color) {
 	}
 }
 
-func (img *image) Line(x0, y0, x1, y1 int, c color) {
+func (img *image) Line(x0, y0, x1, y1 int, c color.Color) {
 	if x0 < 0 || x0 >= int(img.Width) {
 		panic(fmt.Sprintf("x0(%v) is out of range!", x0))
 	} else if x1 < 0 || x1 >= int(img.Width) {
@@ -227,11 +154,11 @@ func (img *image) Line(x0, y0, x1, y1 int, c color) {
 	}
 }
 
-func (img *image) Triangle(t Triangle, c0, c1, c2 color) {
-	v0, v1, v2 := t.v0, t.v1, t.v2
+func (img *image) Triangle(t geometry.Triangle, c0, c1, c2 color.Color) {
+	v0, v1, v2 := t.V0, t.V1, t.V2
 
-	swap := func(v0, v1 *obj.Vertex) {
-		t := obj.Vertex{v0.X, v0.Y, v0.Z}
+	swap := func(v0, v1 *geometry.Vertex3) {
+		t := geometry.Vertex3{v0.X, v0.Y, v0.Z}
 		v0.X = v1.X
 		v0.Y = v1.Y
 		v0.Z = v1.Z
@@ -258,8 +185,8 @@ func (img *image) Triangle(t Triangle, c0, c1, c2 color) {
 		alpha := (y - v0.Y) / totalHeight
 		beta := (y - v0.Y) / segmentHeight
 
-		a := obj.Add(v0, obj.Multiply(obj.Subtract(v2, v0), alpha))
-		b := obj.Add(v0, obj.Multiply(obj.Subtract(v1, v0), beta))
+		a := geometry.Add(v0, geometry.Multiply(geometry.Subtract(v2, v0), alpha))
+		b := geometry.Add(v0, geometry.Multiply(geometry.Subtract(v1, v0), beta))
 
 		if a.X > b.X {
 			swap(&a, &b)
@@ -268,8 +195,8 @@ func (img *image) Triangle(t Triangle, c0, c1, c2 color) {
 		barycentricA := t.Barycentric(a)
 		barycentricB := t.Barycentric(b)
 
-		colorA := c0.Multiply(barycentricA.X) + c1.Multiply(barycentricA.Y) + c2.Multiply(barycentricA.Z)
-		colorB := c0.Multiply(barycentricB.X) + c1.Multiply(barycentricB.Y) + c2.Multiply(barycentricB.Z)
+		colorA := color.Multiply(c0, barycentricA.X) + color.Multiply(c1, barycentricA.Y) + color.Multiply(c2, barycentricA.Z)
+		colorB := color.Multiply(c0, barycentricB.X) + color.Multiply(c1, barycentricB.Y) + color.Multiply(c2, barycentricB.Z)
 
 		delta := math.Abs(b.X - a.X)
 		for x := a.X; x <= b.X; x++ {
@@ -279,12 +206,12 @@ func (img *image) Triangle(t Triangle, c0, c1, c2 color) {
 				t = tp / delta
 			}
 
-			ap := colorA.Multiply(float64(1)-t)
-			bp := colorB.Multiply(t)
-			lerp := ap.Add(bp)
+			ap := color.Multiply(colorA, float64(1)-t)
+			bp := color.Multiply(colorB, t)
+			lerp := color.Add(ap, bp)
 
 			if barycentricA.X == -1 || barycentricB.X == -1 {
-				img.Set(int(x), int(y), white)
+				img.Set(int(x), int(y), color.White)
 			} else {
 				img.Set(int(x), int(y), lerp)
 			}
@@ -298,8 +225,8 @@ func (img *image) Triangle(t Triangle, c0, c1, c2 color) {
 		alpha := (y - v0.Y) / totalHeight
 		beta := (y - v1.Y) / segmentHeight
 
-		a := obj.Add(v0, obj.Multiply(obj.Subtract(v2, v0), alpha))
-		b := obj.Add(v1, obj.Multiply(obj.Subtract(v2, v1), beta))
+		a := geometry.Add(v0, geometry.Multiply(geometry.Subtract(v2, v0), alpha))
+		b := geometry.Add(v1, geometry.Multiply(geometry.Subtract(v2, v1), beta))
 
 		if a.X > b.X {
 			swap(&a, &b)
@@ -308,8 +235,8 @@ func (img *image) Triangle(t Triangle, c0, c1, c2 color) {
 		barycentricA := t.Barycentric(a)
 		barycentricB := t.Barycentric(b)
 
-		colorA := c0.Multiply(barycentricA.X) + c1.Multiply(barycentricA.Y) + c2.Multiply(barycentricA.Z)
-		colorB := c0.Multiply(barycentricB.X) + c1.Multiply(barycentricB.Y) + c2.Multiply(barycentricB.Z)
+		colorA := color.Multiply(c0, barycentricA.X) + color.Multiply(c1, barycentricA.Y) + color.Multiply(c2, barycentricA.Z)
+		colorB := color.Multiply(c0, barycentricB.X) + color.Multiply(c1, barycentricB.Y) + color.Multiply(c2, barycentricB.Z)
 
 		delta := math.Abs(b.X - a.X)
 		for x := a.X; x <= b.X; x++ {
@@ -319,12 +246,12 @@ func (img *image) Triangle(t Triangle, c0, c1, c2 color) {
 				t = tp / delta
 			}
 
-			ap := colorA.Multiply(float64(1)-t)
-			bp := colorB.Multiply(t)
-			lerp := ap.Add(bp)
+			ap := color.Multiply(colorA, float64(1)-t)
+			bp := color.Multiply(colorB, t)
+			lerp := color.Add(ap, bp)
 
 			if barycentricA.X == -1 || barycentricB.X == -1 {
-				img.Set(int(x), int(y), white)
+				img.Set(int(x), int(y), color.White)
 			} else {
 				img.Set(int(x), int(y), lerp)
 			}
@@ -333,37 +260,6 @@ func (img *image) Triangle(t Triangle, c0, c1, c2 color) {
 }
 
 //------------------------------------------------------------------------------
-
-type Triangle struct {
-	v0 obj.Vertex
-	v1 obj.Vertex
-	v2 obj.Vertex
-}
-
-func (t *Triangle) Barycentric(p obj.Vertex) obj.Vertex {
-	v0 := obj.Subtract(t.v1, t.v0)
-	v1 := obj.Subtract(t.v2, t.v0)
-	v2 := obj.Subtract(p, t.v0)
-
-	d00 := obj.DotProduct(v0, v0)
-	d01 := obj.DotProduct(v0, v1)
-	d11 := obj.DotProduct(v1, v1)
-	d20 := obj.DotProduct(v2, v0)
-	d21 := obj.DotProduct(v2, v1)
-
-	denom := (d00 * d11) - (d01 * d01)
-
-	v := (d11 * d20 - d01 * d21) / denom
-	w := (d00 * d21 - d01 * d20) / denom
-	u := float64(1) - v - w
-
-	sum := u + v + w
-	if sum < 0.99 || sum > 1.001 {
-		return obj.Vertex{-1, -1, -1}
-	}
-
-	return obj.Vertex{u, v, w}
-}
 
 func usage(progName string) {
 	fmt.Printf("Usage: %s obj_file output_img.png\n", progName)
@@ -380,7 +276,7 @@ func main() {
 	objFile := os.Args[1]
 	outFile := os.Args[2]
 
-	lightDir := obj.Vertex{0, 0, -1}
+	lightDir := geometry.Vertex3{0, 0, -1}
 
 	width := 1000
 	height := 1000
@@ -394,25 +290,25 @@ func main() {
 	for i := 0; i < len(model.Faces); i++ {
 		face := model.Faces[i]
 
-		var screenCoords [3]obj.Vertex
-		var worldCoords [3]obj.Vertex
+		var screenCoords [3]geometry.Vertex3
+		var worldCoords [3]geometry.Vertex3
 
 		for j := 0; j < 3; j++ {
 			v := model.Vertices[face[j]-1]
 			x := (v.X + 1) * (float64(width-1) / 2)
 			y := (v.Y + 1) * (float64(height-1) / 2)
-			screenCoords[j] = obj.Vertex{x, y, float64(0)}
+			screenCoords[j] = geometry.Vertex3{x, y, float64(0)}
 			worldCoords[j] = v
 		}
 
-		n := obj.CrossProduct(obj.Subtract(worldCoords[2], worldCoords[0]), obj.Subtract(worldCoords[1], worldCoords[0]))
+		n := geometry.CrossProduct(geometry.Subtract(worldCoords[2], worldCoords[0]), geometry.Subtract(worldCoords[1], worldCoords[0]))
 		n.Normalize()
-		intensity := obj.DotProduct(n, lightDir)
+		intensity := geometry.DotProduct(n, lightDir)
 		if intensity > 0 {
-			var c color
-			c = white.Multiply(intensity)
+			var c color.Color
+			c = color.Multiply(color.White, intensity)
 			c.SetAlpha(byte(0xFF))
-			img.Triangle(Triangle{screenCoords[0], screenCoords[1], screenCoords[2]}, c, c, c)
+			img.Triangle(geometry.Triangle{screenCoords[0], screenCoords[1], screenCoords[2]}, c, c, c)
 		}
 	}
 

@@ -7,68 +7,11 @@ import (
 	"os"
 	"regexp"
 	"strconv"
-	"math"
+	"github.com/GrooveStomp/tiny-renderer/geometry"
 )
 
-type Vertex struct {
-	X float64
-	Y float64
-	Z float64
-}
-
-func (v *Vertex) Length() float64 {
-	p := (v.X * v.X) + (v.Y * v.Y) + (v.Z * v.Z)
-	return math.Sqrt(p)
-}
-
-func (v *Vertex) Normalize() {
-	length := v.Length()
-	v.X = v.X / length
-	v.Y = v.Y / length
-	v.Z = v.Z / length
-}
-
-func Subtract(a, b Vertex) Vertex {
-	x := a.X - b.X
-	y := a.Y - b.Y
-	z := a.Z - b.Z
-	return Vertex{x, y, z}
-}
-
-func Add(a, b Vertex) Vertex {
-	x := a.X + b.X
-	y := a.Y + b.Y
-	z := a.Z + b.Z
-	return Vertex{x, y, z}
-}
-
-func Multiply(v Vertex, f float64) Vertex {
-	x := v.X * f
-	y := v.Y * f
-	z := v.Z * f
-	return Vertex{x, y, z}
-}
-
-func DotProduct(a, b Vertex) float64 {
-	x := a.X * b.X
-	y := a.Y * b.Y
-	z := a.Z * b.Z
-	return x + y + z
-}
-
-func CrossProduct(a, b Vertex) Vertex {
-	x := a.Y * b.Z - a.Z * b.Y
-	y := a.Z * b.X - a.X * b.Z
-	z := a.X * b.Y - a.Y * b.X
-	return Vertex{x, y, z}
-}
-
-func (v *Vertex) String() string {
-	return fmt.Sprintf("%.2f,%.2f,%.2f", v.X, v.Y, v.Z)
-}
-
 type Model struct {
-	Vertices []Vertex
+	Vertices []geometry.Vertex3
 	Faces    [][3]uint
 }
 
@@ -131,7 +74,7 @@ func (self *Model) ReadFromFile(filename string) {
 	}
 	f = bufio.NewReader(osFile)
 
-	self.Vertices = make([]Vertex, numVertices)
+	self.Vertices = make([]geometry.Vertex3, numVertices)
 	self.Faces = make([][3]uint, numFaces)
 
 	// Now Read data into faces or vertex slot.
@@ -164,7 +107,7 @@ func (self *Model) ReadFromFile(filename string) {
 			if err != nil {
 				panic(err)
 			}
-			self.Vertices[vertexIndex] = Vertex{x, y, z}
+			self.Vertices[vertexIndex] = geometry.Vertex3{x, y, z}
 			vertexIndex++
 		} else if simpleFaceRegexp.Match(line) { // line starts with "f "
 			matches = faceRegexp.FindStringSubmatch(string(line))
