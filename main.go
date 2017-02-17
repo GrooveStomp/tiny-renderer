@@ -8,7 +8,6 @@ import (
 	"image/png"
 	"math"
 	"os"
-	"sort"
 	// "github.com/pkg/profile"
 )
 
@@ -50,6 +49,10 @@ func (c color) Rgba() (byte, byte, byte, byte) {
 func (c *color) Set(r, g, b, a byte) {
 	new := NewColorRgba(r, g, b, a)
 	*c = new
+}
+
+func (c *color) SetAlpha(a byte) {
+	*c = color(uint32(*c) | uint32(a))
 }
 
 func (c color) Multiply(k float64) color {
@@ -224,9 +227,8 @@ func (img *image) Line(x0, y0, x1, y1 int, c color) {
 	}
 }
 
-func (img *image) TriangleSweep(t Triangle, c0, c1, c2 color) {
+func (img *image) Triangle(t Triangle, c0, c1, c2 color) {
 	v0, v1, v2 := t.v0, t.v1, t.v2
-	//fmt.Printf("c0(%s), c1(%s), c2(%s)\n", c0.String(), c1.String(), c2.String())
 
 	swap := func(v0, v1 *obj.Vertex) {
 		t := obj.Vertex{v0.X, v0.Y, v0.Z}
@@ -271,29 +273,21 @@ func (img *image) TriangleSweep(t Triangle, c0, c1, c2 color) {
 
 		delta := math.Abs(b.X - a.X)
 		for x := a.X; x <= b.X; x++ {
-			//fmt.Printf("[%v..%v..%v]", int(a.X), int(x), int(b.X))
-
 			tp := (x - a.X)
 			t := tp
 			if tp > 0 {
 				t = tp / delta
 			}
-			//fmt.Printf(", t(%2.2f)", t)
-
-			//fmt.Printf(", barycentric@a(%v), barycentric@b(%v)", barycentricA.String(), barycentricB.String())
 
 			ap := colorA.Multiply(float64(1)-t)
 			bp := colorB.Multiply(t)
-			//fmt.Printf(", color@a(%s), color@b(%s)", colorA.String(), colorB.String())
 			lerp := ap.Add(bp)
-			//fmt.Printf(", lerp[a,b](%s)\n", lerp.String())
 
 			if barycentricA.X == -1 || barycentricB.X == -1 {
 				img.Set(int(x), int(y), white)
 			} else {
 				img.Set(int(x), int(y), lerp)
 			}
-
 		}
 
 		// img.HorizontalLine(int(a.X), int(b.X), int(y), c)
@@ -335,34 +329,6 @@ func (img *image) TriangleSweep(t Triangle, c0, c1, c2 color) {
 				img.Set(int(x), int(y), lerp)
 			}
 		}
-
-		//img.HorizontalLine(int(a.X), int(b.X), int(y), )
-	}
-}
-
-func (img *image) TriangleBarycentric(t Triangle, c0, c1, c2 color) {
-	clamp := obj.Vertex{float64(img.Width - 1), float64(img.Height - 1), float64(0)}
-
-	xs := []float64{t.v0.X, t.v1.X, t.v2.X, 0, float64(img.Width - 1)}
-	ys := []float64{t.v0.Y, t.v1.Y, t.v2.Y, 0, float64(img.Height - 1)}
-
-	sort.Float64s(xs)
-	sort.Float64s(ys)
-
-	bboxMin := obj.Vertex{math.Max(0, xs[0]), math.Max(0, ys[0]), float64(0)}
-	bboxMax := obj.Vertex{math.Min(clamp.X, xs[len(xs)-1]), math.Min(clamp.Y, ys[len(ys)-1]), float64(0)}
-
-	for x := int(math.Floor(bboxMin.X)); x <= int(math.Ceil(bboxMax.X)); x++ {
-		for y := int(math.Floor(bboxMin.Y)); y <= int(math.Ceil(bboxMax.Y)); y++ {
-			bc := t.Barycentric(obj.Vertex{float64(x), float64(y), float64(0)})
-			if bc.X < 0 || bc.Y < 0 || bc.Z < 0 {
-				continue
-			}
-
-			cR := c0.Multiply(bc.X) + c1.Multiply(bc.Y) + c2.Multiply(bc.Z)
-
-			img.Set(int(x), int(y), cR)
-		}
 	}
 }
 
@@ -373,23 +339,6 @@ type Triangle struct {
 	v1 obj.Vertex
 	v2 obj.Vertex
 }
-
-
-// // Compute barycentric coordinates (u, v, w) for
-// // point p with respect to triangle (a, b, c)
-// void Barycentric(Point p, Point a, Point b, Point c, float &u, float &v, float &w)
-// {
-//     Vector v0 = b - a, v1 = c - a, v2 = p - a;
-//     float d00 = Dot(v0, v0);
-//     float d01 = Dot(v0, v1);
-//     float d11 = Dot(v1, v1);
-//     float d20 = Dot(v2, v0);
-//     float d21 = Dot(v2, v1);
-//     float denom = d00 * d11 - d01 * d01;
-//     v = (d11 * d20 - d01 * d21) / denom;
-//     w = (d00 * d21 - d01 * d20) / denom;
-//     u = 1.0f - v - w;
-// }
 
 func (t *Triangle) Barycentric(p obj.Vertex) obj.Vertex {
 	v0 := obj.Subtract(t.v1, t.v0)
@@ -424,14 +373,14 @@ func usage(progName string) {
 func main() {
 	//defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
 
-	if len(os.Args) < 2 {
+	if len(os.Args) < 3 {
 		usage(os.Args[0])
 	}
 
-	//objFile := os.Args[1]
-	outFile := os.Args[1]
+	objFile := os.Args[1]
+	outFile := os.Args[2]
 
-	// lightDir := obj.Vertex{0, 0, -1}
+	lightDir := obj.Vertex{0, 0, -1}
 
 	width := 1000
 	height := 1000
@@ -439,40 +388,33 @@ func main() {
 	img := MakeImage(width, height)
 	img.Fill(0x000000FF)
 
-	t0 := Triangle{obj.Vertex{  0, 700, 0}, obj.Vertex{499, 800, 0}, obj.Vertex{999, 200, 0}}
-	//img.TriangleSweep(t0, 0xFF0000FF, 0x00FF00FF, 0x0000FFFF)
-	//img.TriangleSweep(t0, red, red, red)
-	//img.TriangleSweep(t0, green, green, green)
-	//img.TriangleSweep(t0, blue, blue, blue)
-	//img.TriangleSweep(t0, red, green, blue)
-	img.TriangleBarycentric(t0, red, green, blue)
+	model := obj.NewModel()
+	model.ReadFromFile(objFile)
 
-	// model := obj.NewModel()
-	// model.ReadFromFile(objFile)
+	for i := 0; i < len(model.Faces); i++ {
+		face := model.Faces[i]
 
-	// for i := 0; i < len(model.Faces); i++ {
-	// 	face := model.Faces[i]
+		var screenCoords [3]obj.Vertex
+		var worldCoords [3]obj.Vertex
 
-	// 	var screenCoords [3]obj.Vertex
-	// 	var worldCoords [3]obj.Vertex
+		for j := 0; j < 3; j++ {
+			v := model.Vertices[face[j]-1]
+			x := (v.X + 1) * (float64(width-1) / 2)
+			y := (v.Y + 1) * (float64(height-1) / 2)
+			screenCoords[j] = obj.Vertex{x, y, float64(0)}
+			worldCoords[j] = v
+		}
 
-	// 	for j := 0; j < 3; j++ {
-	// 		v := model.Vertices[face[j]-1]
-	// 		x := (v.X + 1) * (float64(width-1) / 2)
-	// 		y := (v.Y + 1) * (float64(height-1) / 2)
-	// 		screenCoords[j] = obj.Vertex{x, y, float64(0)}
-	// 		worldCoords[j] = v
-	// 	}
-
-	// 	n := obj.CrossProduct(obj.Subtract(worldCoords[2], worldCoords[0]), obj.Subtract(worldCoords[1], worldCoords[0]))
-	// 	n.Normalize()
-	// 	intensity := obj.DotProduct(n, lightDir)
-	// 	if intensity > 0 {
-	// 		var c color
-	// 		c.Set(uint32(intensity*255), uint32(intensity*255), uint32(intensity*255), 255)
-	// 		img.TriangleSweep(Triangle{screenCoords[0], screenCoords[1], screenCoords[2]}, c)
-	// 	}
-	// }
+		n := obj.CrossProduct(obj.Subtract(worldCoords[2], worldCoords[0]), obj.Subtract(worldCoords[1], worldCoords[0]))
+		n.Normalize()
+		intensity := obj.DotProduct(n, lightDir)
+		if intensity > 0 {
+			var c color
+			c = white.Multiply(intensity)
+			c.SetAlpha(byte(0xFF))
+			img.Triangle(Triangle{screenCoords[0], screenCoords[1], screenCoords[2]}, c, c, c)
+		}
+	}
 
 	img.WritePng(outFile)
 }
