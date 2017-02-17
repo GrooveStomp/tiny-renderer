@@ -63,6 +63,10 @@ func CrossProduct(a, b Vertex) Vertex {
 	return Vertex{x, y, z}
 }
 
+func (v *Vertex) String() string {
+	return fmt.Sprintf("%.2f,%.2f,%.2f", v.X, v.Y, v.Z)
+}
+
 type Model struct {
 	Vertices []Vertex
 	Faces    [][3]uint
