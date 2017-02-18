@@ -37,8 +37,23 @@ func (c Color) Rgba() (byte, byte, byte, byte) {
 	return byte(r), byte(g), byte(b), byte(a)
 }
 
+func (c Color) RgbaFloat64() (float64, float64, float64, float64) {
+	r, g, b, a := c.Rgba()
+	r1 := float64(r) / float64(255)
+	g1 := float64(g) / float64(255)
+	b1 := float64(b) / float64(255)
+	a1 := float64(a) / float64(255)
+
+	return r1, g1, b1, a1
+}
+
 func (c *Color) Set(r, g, b, a byte) {
 	new := NewColorRgba(r, g, b, a)
+	*c = new
+}
+
+func (c *Color) SetFloat64(r, g, b, a float64) {
+	new := NewColorFloat64(r, g, b, a)
 	*c = new
 }
 
@@ -47,11 +62,23 @@ func (c *Color) SetAlpha(a byte) {
 }
 
 func Multiply(c Color, k float64) Color {
-	r, g, b, a := c.Rgba()
-	r = byte(float64(r) * k)
-	g = byte(float64(g) * k)
-	b = byte(float64(b) * k)
-	a = byte(float64(a) * k)
+	r, g, b, a := c.RgbaFloat64()
+	r *= k
+	g *= k
+	b *= k
+	a *= k
+
+	return NewColorFloat64(r, g, b, a)
+}
+
+func MultiplyColor(c1 Color, c2 Color) Color {
+	r1, g1, b1, a1 := c1.Rgba()
+	r2, g2, b2, a2 := c2.Rgba()
+
+	r := r1 * r2
+	g := g1 * g2
+	b := b1 * b2
+	a := a1 * a2
 
 	return NewColorRgba(r, g, b, a)
 }

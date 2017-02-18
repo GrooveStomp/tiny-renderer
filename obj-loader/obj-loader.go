@@ -12,7 +12,9 @@ import (
 
 type Model struct {
 	Vertices []geometry.Vertex3
-	Faces    [][3]uint
+	FaceVertices [][3]uint
+	FaceTexCoords [][3]uint
+	TexCoords []geometry.Vertex3
 }
 
 func NewModel() *Model {
@@ -26,16 +28,20 @@ func (self *Model) ReadFromFile(filename string) {
 		isPrefix    bool
 		err         error
 		numVertices uint
-		numFaces    uint
 		vertexIndex uint
-		faceIndex   uint
+		numFaces    uint
+		faceIndex    uint
+		numTexCoords uint
+		texCoordIndex uint
 		matches     []string
 	)
 
 	simpleVertRegexp := regexp.MustCompile(`v -?\d+`)
 	vertexRegexp := regexp.MustCompile(`v (-?\d+(?:\.\d+?\d+(?:e-?\d+)?)?) (-?\d+(?:\.\d+?\d+(?:e-?\d+)?)?) (-?\d+(?:\.\d+?\d+(?:e-?\d+)?)?)`)
 	simpleFaceRegexp := regexp.MustCompile(`f \d+`)
-	faceRegexp := regexp.MustCompile(`f (\d+)/\d+/\d+ (\d+)/\d+/\d+ (\d+)/\d+/\d+$`)
+	faceRegexp := regexp.MustCompile(`f (\d+)/(\d+)/(\d+) (\d+)/(\d+)/(\d+) (\d+)/(\d+)/(\d+)$`)
+	simpleTexRegexp := regexp.MustCompile(`vt\s+-?\d+`)
+	texRegexp := regexp.MustCompile(`vt\s+(-?\d+(?:\.\d+))\s+(-?\d+(?:\.\d+))\s+(-?\d+(?:\.\d+))`)
 
 	osFile, err := os.OpenFile(filename, os.O_RDONLY, 0644)
 	if err != nil {
@@ -60,6 +66,8 @@ func (self *Model) ReadFromFile(filename string) {
 			numVertices++
 		} else if simpleFaceRegexp.Match(line) { // line starts with "f "
 			numFaces++
+		} else if simpleTexRegexp.Match(line) { // line starts with "vt "
+			numTexCoords++
 		}
 	}
 
@@ -75,7 +83,9 @@ func (self *Model) ReadFromFile(filename string) {
 	f = bufio.NewReader(osFile)
 
 	self.Vertices = make([]geometry.Vertex3, numVertices)
-	self.Faces = make([][3]uint, numFaces)
+	self.FaceVertices = make([][3]uint, numFaces)
+	self.TexCoords = make([]geometry.Vertex3, numTexCoords)
+	self.FaceTexCoords = make([][3]uint, numFaces)
 
 	// Now Read data into faces or vertex slot.
 	for {
@@ -111,20 +121,53 @@ func (self *Model) ReadFromFile(filename string) {
 			vertexIndex++
 		} else if simpleFaceRegexp.Match(line) { // line starts with "f "
 			matches = faceRegexp.FindStringSubmatch(string(line))
-			x, err := strconv.ParseUint(matches[1], 10, 64)
+			v0, err := strconv.ParseUint(matches[1], 10, 64)
 			if err != nil {
 				panic(err)
 			}
-			y, err := strconv.ParseUint(matches[2], 10, 64)
+			vt0, err := strconv.ParseUint(matches[2], 10, 64)
 			if err != nil {
 				panic(err)
 			}
-			z, err := strconv.ParseUint(matches[3], 10, 64)
+			v1, err := strconv.ParseUint(matches[4], 10, 64)
 			if err != nil {
 				panic(err)
 			}
-			self.Faces[faceIndex] = [3]uint{uint(x), uint(y), uint(z)}
+			vt1, err := strconv.ParseUint(matches[5], 10, 64)
+			if err != nil {
+				panic(err)
+			}
+			v2, err := strconv.ParseUint(matches[7], 10, 64)
+			if err != nil {
+				panic(err)
+			}
+			vt2, err := strconv.ParseUint(matches[8], 10, 64)
+			if err != nil {
+				panic(err)
+			}
+
+			self.FaceVertices[faceIndex] = [3]uint{uint(v0), uint(v1), uint(v2)}
+			self.FaceTexCoords[faceIndex] = [3]uint{uint(vt0), uint(vt1), uint(vt2)}
 			faceIndex++
+		} else if simpleTexRegexp.Match(line) { // line starts with "vt "
+			matches = texRegexp.FindStringSubmatch(string(line))
+			if matches == nil {
+				panic(fmt.Sprintf("%s", line))
+			}
+			x, err := strconv.ParseFloat(matches[1], 64)
+			if err != nil {
+				panic(err)
+			}
+			y, err := strconv.ParseFloat(matches[2], 64)
+			if err != nil {
+				panic(err)
+			}
+			z, err := strconv.ParseFloat(matches[3], 64)
+			if err != nil {
+				panic(err)
+			}
+			self.TexCoords[texCoordIndex] = geometry.Vertex3{x, y, z}
+			texCoordIndex++
 		}
 	}
 	osFile.Close()
