@@ -197,8 +197,10 @@ func (img *image) Line(x0, y0, x1, y1 int, c color.Color) {
 	}
 }
 
-func RasterPolygon(p *Polygon, img *image, zbuf *zbuffer) {
+func RasterPolygon(p *Polygon, img *image, zbuf *zbuffer, step float64) {
 	v0, v1, v2 := p.Vertices[0], p.Vertices[1], p.Vertices[2]
+	if v0.Y == v1.Y && v0.Y == v2.Y { return }
+
 	t := geometry.Triangle{p.Vertices[0], p.Vertices[1], p.Vertices[2]}
 
 	swap := func(v0, v1 *geometry.Vertex3) {
@@ -218,17 +220,27 @@ func RasterPolygon(p *Polygon, img *image, zbuf *zbuffer) {
 		swap(&v1, &v2)
 	}
 
+	intensity := geometry.DotProduct(p.Normals[0], LIGHT_DIR)
 	totalHeight := v2.Y - v0.Y
 
-	intensity := geometry.DotProduct(p.Normals[0], LIGHT_DIR)
+	for y := 0.0; y < totalHeight; y += step {
+		isSecondHalf := y > (v1.Y - v0.Y) || v1.Y == v0.Y
 
-	for y := v0.Y; y <= v1.Y; y++ {
-		segmentHeight := v1.Y - v0.Y + 1
-		alpha := (y - v0.Y) / totalHeight
-		beta := (y - v0.Y) / segmentHeight
+		firstSegmentHeight := v1.Y - v0.Y
+		secondSegmentHeight := v2.Y - v1.Y
+		segmentHeight := firstSegmentHeight
+		if isSecondHalf { segmentHeight = secondSegmentHeight }
+
+		alpha := y / totalHeight
+
+		beta := y / segmentHeight
+		if isSecondHalf { beta = (y - firstSegmentHeight) / segmentHeight }
 
 		a := geometry.Add(v0, geometry.Multiply(geometry.Subtract(v2, v0), alpha))
 		b := geometry.Add(v0, geometry.Multiply(geometry.Subtract(v1, v0), beta))
+		if isSecondHalf {
+			b = geometry.Add(v1, geometry.Multiply(geometry.Subtract(v2, v1), beta))
+		}
 
 		if a.X > b.X {
 			swap(&a, &b)
@@ -238,105 +250,42 @@ func RasterPolygon(p *Polygon, img *image, zbuf *zbuffer) {
 		barycentricB := t.Barycentric(b)
 
 		if barycentricA.X == -1 || barycentricB.X == -1 {
-
+			;
 		} else {
-			// Now set the Z-Buffer
 			az := (v0.Z * barycentricA.X) + (v1.Z * barycentricA.Y) + (v2.Z * barycentricA.Z)
 			bz := (v0.Z * barycentricB.X) + (v1.Z * barycentricB.Y) + (v2.Z * barycentricB.Z)
-			au := (p.TexCoords[0].X * barycentricA.X) + (p.TexCoords[1].X * barycentricA.Y) + (p.TexCoords[2].X * barycentricA.Z)
-			av := (p.TexCoords[0].Y * barycentricA.X) + (p.TexCoords[1].Y * barycentricA.Y) + (p.TexCoords[2].Y * barycentricA.Z)
-			bu := (p.TexCoords[0].X * barycentricB.X) + (p.TexCoords[1].X * barycentricB.Y) + (p.TexCoords[2].X * barycentricB.Z)
-			bv := (p.TexCoords[0].Y * barycentricB.X) + (p.TexCoords[1].Y * barycentricB.Y) + (p.TexCoords[2].Y * barycentricB.Z)
-			ac := color.Multiply(p.Colors[0], barycentricA.X) + color.Multiply(p.Colors[1], barycentricA.Y) + color.Multiply(p.Colors[2], barycentricA.Z)
-			bc := color.Multiply(p.Colors[0], barycentricB.X) + color.Multiply(p.Colors[1], barycentricB.Y) + color.Multiply(p.Colors[2], barycentricB.Z)
+			 au := (p.TexCoords[0].X * barycentricA.X) + (p.TexCoords[1].X * barycentricA.Y) + (p.TexCoords[2].X * barycentricA.Z)
+			 av := (p.TexCoords[0].Y * barycentricA.X) + (p.TexCoords[1].Y * barycentricA.Y) + (p.TexCoords[2].Y * barycentricA.Z)
+			 bu := (p.TexCoords[0].X * barycentricB.X) + (p.TexCoords[1].X * barycentricB.Y) + (p.TexCoords[2].X * barycentricB.Z)
+			 bv := (p.TexCoords[0].Y * barycentricB.X) + (p.TexCoords[1].Y * barycentricB.Y) + (p.TexCoords[2].Y * barycentricB.Z)
+			// ac := color.Multiply(p.Colors[0], barycentricA.X) + color.Multiply(p.Colors[1], barycentricA.Y) + color.Multiply(p.Colors[2], barycentricA.Z)
+			// bc := color.Multiply(p.Colors[0], barycentricB.X) + color.Multiply(p.Colors[1], barycentricB.Y) + color.Multiply(p.Colors[2], barycentricB.Z)
 
-			delta := math.Abs(b.X - a.X)
-
-			for x := a.X; x <= b.X; x++ {
-				tp := (x - a.X)
-				t := tp
-				if tp > 0 {
-					t = tp / delta
+			for x := a.X; x <= b.X; x += step {
+				t := (x - a.X)
+				if t > 0 {
+					t = t / (b.X - a.X)
 				}
 
 				z := (az * (float64(1) - t)) + (bz * t)
 				u := (au * (float64(1) - t)) + (bu * t)
 				v := (av * (float64(1) - t)) + (bv * t)
-				c := color.Multiply(ac, float64(1)-t) + color.Multiply(bc, t)
-				c.SetAlpha(0xFF)
-				if zbuf.Get(int(x), int(y)) < z {
-					zbuf.Set(int(x), int(y), z)
+				// c := color.Multiply(ac, float64(1)-t) + color.Multiply(bc, t)
+				// c.SetAlpha(0xFF)
 
-					xTex := u * float64(p.Texture.Width)
-					yTex := v * float64(p.Texture.Height)
+				if zbuf.Get(int(x), int(v0.Y + y)) < z {
+					zbuf.Set(int(x), int(v0.Y + y), z)
+
+					xTex := math.Max(u * float64(p.Texture.Width), 0.0)
+					yTex := math.Max(v * float64(p.Texture.Height), 0.0)
 					tex := p.Texture.Get(int(xTex), int(yTex))
 					f := color.Multiply(tex, intensity)
 					f.SetAlpha(byte(0xFF))
 
-					col := color.Multiply(color.White, intensity)
-					col.SetAlpha(0xFF)
+					//col := color.Multiply(color.White, intensity)
+					//col.SetAlpha(0xFF)
 
-					img.Set(int(x), int(y), f)
-				}
-			}
-		}
-	}
-
-	for y := v1.Y; y <= v2.Y; y++ {
-		segmentHeight := v2.Y - v1.Y + 1
-		alpha := (y - v0.Y) / totalHeight
-		beta := (y - v1.Y) / segmentHeight
-
-		a := geometry.Add(v0, geometry.Multiply(geometry.Subtract(v2, v0), alpha))
-		b := geometry.Add(v1, geometry.Multiply(geometry.Subtract(v2, v1), beta))
-
-		if a.X > b.X {
-			swap(&a, &b)
-		}
-
-		barycentricA := t.Barycentric(a)
-		barycentricB := t.Barycentric(b)
-
-		if barycentricA.X == -1 || barycentricB.X == -1 {
-
-		} else {
-			// Now set the Z-Buffer
-			az := (v0.Z * barycentricA.X) + (v1.Z * barycentricA.Y) + (v2.Z * barycentricA.Z)
-			bz := (v0.Z * barycentricB.X) + (v1.Z * barycentricB.Y) + (v2.Z * barycentricB.Z)
-			au := (p.TexCoords[0].X * barycentricA.X) + (p.TexCoords[1].X * barycentricA.Y) + (p.TexCoords[2].X * barycentricA.Z)
-			av := (p.TexCoords[0].Y * barycentricA.X) + (p.TexCoords[1].Y * barycentricA.Y) + (p.TexCoords[2].Y * barycentricA.Z)
-			bu := (p.TexCoords[0].X * barycentricB.X) + (p.TexCoords[1].X * barycentricB.Y) + (p.TexCoords[2].X * barycentricB.Z)
-			bv := (p.TexCoords[0].Y * barycentricB.X) + (p.TexCoords[1].Y * barycentricB.Y) + (p.TexCoords[2].Y * barycentricB.Z)
-			ac := color.Multiply(p.Colors[0], barycentricA.X) + color.Multiply(p.Colors[1], barycentricA.Y) + color.Multiply(p.Colors[2], barycentricA.Z)
-			bc := color.Multiply(p.Colors[0], barycentricB.X) + color.Multiply(p.Colors[1], barycentricB.Y) + color.Multiply(p.Colors[2], barycentricB.Z)
-
-			delta := math.Abs(b.X - a.X)
-
-			for x := a.X; x <= b.X; x++ {
-				tp := (x - a.X)
-				t := tp
-				if tp > 0 {
-					t = tp / delta
-				}
-
-				z := (az * (float64(1) - t)) + (bz * t)
-				u := (au * (float64(1) - t)) + (bu * t)
-				v := (av * (float64(1) - t)) + (bv * t)
-				c := color.Multiply(ac, float64(1)-t) + color.Multiply(bc, t)
-				c.SetAlpha(0xFF)
-				if zbuf.Get(int(x), int(y)) < z {
-					zbuf.Set(int(x), int(y), z)
-
-					xTex := u * float64(p.Texture.Width)
-					yTex := v * float64(p.Texture.Height)
-					tex := p.Texture.Get(int(xTex), int(yTex))
-					f := color.Multiply(tex, intensity)
-					f.SetAlpha(byte(0xFF))
-
-					col := color.Multiply(color.White, intensity)
-					col.SetAlpha(0xFF)
-
-					img.Set(int(x), int(y), f)
+					img.Set(int(x), int(v0.Y + y), f)
 				}
 			}
 		}
@@ -433,7 +382,7 @@ func main() {
 				texImage,
 			)
 
-			RasterPolygon(p, img, zbuf)
+			RasterPolygon(p, img, zbuf, 0.5)
 		}
 	}
 
