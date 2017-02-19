@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	obj "github.com/GrooveStomp/tiny-renderer/obj-loader"
+	mesh "github.com/GrooveStomp/tiny-renderer/mesh"
 	goimg "image"
 	gocolor "image/color"
 	"image/png"
@@ -14,7 +14,7 @@ import (
 	"github.com/GrooveStomp/tiny-renderer/texture"
 )
 
-var LIGHT_DIR = geometry.Vertex3{0, 0, -1}
+var LIGHT_DIR = geometry.Vector3{0, 0, -1}
 
 //------------------------------------------------------------------------------
 
@@ -197,44 +197,49 @@ func (img *image) Line(x0, y0, x1, y1 int, c color.Color) {
 	}
 }
 
-func RasterPolygon(p *Polygon, img *image, zbuf *zbuffer, step float64) {
-	v0, v1, v2 := p.Vertices[0], p.Vertices[1], p.Vertices[2]
-	if v0.Y == v1.Y && v0.Y == v2.Y { return }
-
-	t := geometry.Triangle{p.Vertices[0], p.Vertices[1], p.Vertices[2]}
-
-	swap := func(v0, v1 *geometry.Vertex3) {
-		t := geometry.Vertex3{v0.X, v0.Y, v0.Z}
-		*v0 = geometry.Vertex3{v1.X, v1.Y, v1.Z}
-		*v1 = geometry.Vertex3{t.X, t.Y, t.Z}
+func RasterPolygon(p *mesh.Face, img *image, zbuf *zbuffer, tex *image, step float64) {
+	if p.Vertices[0].Y == p.Vertices[1].Y && p.Vertices[0].Y == p.Vertices[2].Y {
+		return
 	}
 
 	// Bubblesort. Sort vertices by Y-component, ascending order.
-	if v0.Y > v1.Y {
-		swap(&v0, &v1)
+	if p.Vertices[0].Y > p.Vertices[1].Y {
+		p.Swap(0, 1)
 	}
-	if v0.Y > v2.Y {
-		swap(&v0, &v2)
+	if p.Vertices[0].Y > p.Vertices[2].Y {
+		p.Swap(0, 2)
 	}
-	if v1.Y > v2.Y {
-		swap(&v1, &v2)
+	if p.Vertices[1].Y > p.Vertices[2].Y {
+		p.Swap(1, 2)
 	}
+	v0, v1, v2 := p.Vertices[0], p.Vertices[1], p.Vertices[2]
+	t := geometry.Triangle{v0, v1, v2}
 
 	intensity := geometry.DotProduct(p.Normals[0], LIGHT_DIR)
 	totalHeight := v2.Y - v0.Y
 
+	swap := func(v0, v1 *geometry.Vector3) {
+		t := geometry.Vector3{v0.X, v0.Y, v0.Z}
+		*v0 = geometry.Vector3{v1.X, v1.Y, v1.Z}
+		*v1 = geometry.Vector3{t.X, t.Y, t.Z}
+	}
+
 	for y := 0.0; y < totalHeight; y += step {
-		isSecondHalf := y > (v1.Y - v0.Y) || v1.Y == v0.Y
+		isSecondHalf := y > (v1.Y-v0.Y) || v1.Y == v0.Y
 
 		firstSegmentHeight := v1.Y - v0.Y
 		secondSegmentHeight := v2.Y - v1.Y
 		segmentHeight := firstSegmentHeight
-		if isSecondHalf { segmentHeight = secondSegmentHeight }
+		if isSecondHalf {
+			segmentHeight = secondSegmentHeight
+		}
 
 		alpha := y / totalHeight
 
 		beta := y / segmentHeight
-		if isSecondHalf { beta = (y - firstSegmentHeight) / segmentHeight }
+		if isSecondHalf {
+			beta = (y - firstSegmentHeight) / segmentHeight
+		}
 
 		a := geometry.Add(v0, geometry.Multiply(geometry.Subtract(v2, v0), alpha))
 		b := geometry.Add(v0, geometry.Multiply(geometry.Subtract(v1, v0), beta))
@@ -250,16 +255,14 @@ func RasterPolygon(p *Polygon, img *image, zbuf *zbuffer, step float64) {
 		barycentricB := t.Barycentric(b)
 
 		if barycentricA.X == -1 || barycentricB.X == -1 {
-			;
+
 		} else {
 			az := (v0.Z * barycentricA.X) + (v1.Z * barycentricA.Y) + (v2.Z * barycentricA.Z)
 			bz := (v0.Z * barycentricB.X) + (v1.Z * barycentricB.Y) + (v2.Z * barycentricB.Z)
-			 au := (p.TexCoords[0].X * barycentricA.X) + (p.TexCoords[1].X * barycentricA.Y) + (p.TexCoords[2].X * barycentricA.Z)
-			 av := (p.TexCoords[0].Y * barycentricA.X) + (p.TexCoords[1].Y * barycentricA.Y) + (p.TexCoords[2].Y * barycentricA.Z)
-			 bu := (p.TexCoords[0].X * barycentricB.X) + (p.TexCoords[1].X * barycentricB.Y) + (p.TexCoords[2].X * barycentricB.Z)
-			 bv := (p.TexCoords[0].Y * barycentricB.X) + (p.TexCoords[1].Y * barycentricB.Y) + (p.TexCoords[2].Y * barycentricB.Z)
-			// ac := color.Multiply(p.Colors[0], barycentricA.X) + color.Multiply(p.Colors[1], barycentricA.Y) + color.Multiply(p.Colors[2], barycentricA.Z)
-			// bc := color.Multiply(p.Colors[0], barycentricB.X) + color.Multiply(p.Colors[1], barycentricB.Y) + color.Multiply(p.Colors[2], barycentricB.Z)
+			au := (p.TexCoords[0].X * barycentricA.X) + (p.TexCoords[1].X * barycentricA.Y) + (p.TexCoords[2].X * barycentricA.Z)
+			av := (p.TexCoords[0].Y * barycentricA.X) + (p.TexCoords[1].Y * barycentricA.Y) + (p.TexCoords[2].Y * barycentricA.Z)
+			bu := (p.TexCoords[0].X * barycentricB.X) + (p.TexCoords[1].X * barycentricB.Y) + (p.TexCoords[2].X * barycentricB.Z)
+			bv := (p.TexCoords[0].Y * barycentricB.X) + (p.TexCoords[1].Y * barycentricB.Y) + (p.TexCoords[2].Y * barycentricB.Z)
 
 			for x := a.X; x <= b.X; x += step {
 				t := (x - a.X)
@@ -270,46 +273,21 @@ func RasterPolygon(p *Polygon, img *image, zbuf *zbuffer, step float64) {
 				z := (az * (float64(1) - t)) + (bz * t)
 				u := (au * (float64(1) - t)) + (bu * t)
 				v := (av * (float64(1) - t)) + (bv * t)
-				// c := color.Multiply(ac, float64(1)-t) + color.Multiply(bc, t)
-				// c.SetAlpha(0xFF)
 
-				if zbuf.Get(int(x), int(v0.Y + y)) < z {
-					zbuf.Set(int(x), int(v0.Y + y), z)
+				if zbuf.Get(int(x), int(v0.Y+y)) < z {
+					zbuf.Set(int(x), int(v0.Y+y), z)
 
-					xTex := math.Max(u * float64(p.Texture.Width), 0.0)
-					yTex := math.Max(v * float64(p.Texture.Height), 0.0)
-					tex := p.Texture.Get(int(xTex), int(yTex))
-					f := color.Multiply(tex, intensity)
-					f.SetAlpha(byte(0xFF))
+					xTex := math.Max(u*float64(tex.Width), 0.0)
+					yTex := math.Max(v*float64(tex.Height), 0.0)
+					t := tex.Get(int(xTex), int(yTex))
+					t = color.Multiply(t, intensity)
+					t.SetAlpha(byte(0xFF))
 
-					//col := color.Multiply(color.White, intensity)
-					//col.SetAlpha(0xFF)
-
-					img.Set(int(x), int(v0.Y + y), f)
+					img.Set(int(x), int(v0.Y+y), t)
 				}
 			}
 		}
 	}
-}
-
-//------------------------------------------------------------------------------
-
-type Polygon struct { // Assumed to be a triangle!
-	Vertices  [3]geometry.Vertex3
-	Normals   [3]geometry.Vertex3
-	TexCoords [3]geometry.Vertex3
-	Colors    [3]color.Color
-	Texture   *image
-}
-
-func NewPolygon(v0, v1, v2, n0, n1, n2, uv0, uv1, uv2 geometry.Vertex3, c0, c1, c2 color.Color, tex *image) *Polygon {
-	var p Polygon
-	p.Vertices = [3]geometry.Vertex3{v0, v1, v2}
-	p.Normals = [3]geometry.Vertex3{n0, n1, n2}
-	p.TexCoords = [3]geometry.Vertex3{uv0, uv1, uv2}
-	p.Colors = [3]color.Color{c0, c1, c2}
-	p.Texture = tex
-	return &p
 }
 
 //------------------------------------------------------------------------------
@@ -338,7 +316,7 @@ func main() {
 
 	zbuf := MakeZBuffer(width, height)
 
-	model := obj.NewModel()
+	model := mesh.NewMesh()
 	model.ReadFromFile(objFile)
 
 	tex, err := texture.FromFile(texFile)
@@ -348,41 +326,10 @@ func main() {
 	texImage := FromTexture(tex)
 
 	for i := 0; i < len(model.FaceVertices); i++ {
-		face := model.FaceVertices[i]
-		tex := model.FaceTexCoords[i]
-
-		var screenCoords [3]geometry.Vertex3
-		var worldCoords [3]geometry.Vertex3
-		var uvs [3]geometry.Vertex3
-
-		for j := 0; j < 3; j++ {
-			v := model.Vertices[face[j]-1]
-			x := (v.X + 1) * (float64(width-1) / 2)
-			y := (v.Y + 1) * (float64(height-1) / 2)
-			z := (v.Z + 1) * (float64(height-1) / 2) // TODO(AARON): Need proper viewing volume.
-			screenCoords[j] = geometry.Vertex3{x, y, z}
-			worldCoords[j] = v
-			uvs[j] = model.TexCoords[tex[j]-1]
-		}
-
-		n := geometry.CrossProduct(geometry.Subtract(worldCoords[2], worldCoords[0]), geometry.Subtract(worldCoords[1], worldCoords[0]))
-		n.Normalize()
-		intensity := geometry.DotProduct(n, LIGHT_DIR)
-
+		face := mesh.NewFaceFromMesh(model, i, width, height)
+		intensity := geometry.DotProduct(face.Normals[0], LIGHT_DIR)
 		if intensity > 0 {
-			var c color.Color
-			c = color.Multiply(color.White, intensity)
-			c.SetAlpha(byte(0xFF))
-
-			p := NewPolygon(
-				screenCoords[0], screenCoords[1], screenCoords[2],
-				n, n, n,
-				uvs[0], uvs[1], uvs[2],
-				c, c, c,
-				texImage,
-			)
-
-			RasterPolygon(p, img, zbuf, 0.5)
+			RasterPolygon(face, img, zbuf, texImage, 0.5)
 		}
 	}
 
