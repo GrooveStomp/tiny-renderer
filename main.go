@@ -153,26 +153,22 @@ func (img *image) Line(x0, y0, x1, y1 int, c color.Color) {
 		panic(fmt.Sprintf("y1(%v) is out of range!", y1))
 	}
 
-	steep := false
-	var t int
+	swap := func(a, b *int) {
+		t := *a
+		*a = *b
+		*b = t
+	}
 
+	steep := false
 	if math.Abs(float64(x0-x1)) < math.Abs(float64(y0-y1)) {
-		t = x0
-		x0 = y0
-		y0 = t
-		t = x1
-		x1 = y1
-		y1 = t
+		swap(&x0, &y0)
+		swap(&x1, &y1)
 		steep = true
 	}
 
 	if x0 > x1 {
-		t = x0
-		x0 = x1
-		x1 = t
-		t = y0
-		y0 = y1
-		y1 = t
+		swap(&x0, &x1)
+		swap(&y0, &y1)
 	}
 
 	dx := x1 - x0
@@ -385,8 +381,8 @@ func main() {
 	texFile := os.Args[2]
 	outFile := os.Args[3]
 
-	width := 1000
-	height := 1000
+	width := 512
+	height := 512
 
 	img := MakeImage(width, height)
 	img.Fill(0x000000FF)
