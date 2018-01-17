@@ -2,15 +2,15 @@ package main
 
 import (
 	"fmt"
-	mesh "code.groovestomp.com/tiny-renderer.git/mesh"
+	mesh "code.groovestomp.com/tiny-renderer/mesh"
 	goimg "image"
 	gocolor "image/color"
 	"image/png"
 	"math"
 	"os"
-	"code.groovestomp.com/tiny-renderer.git/color"
-	"code.groovestomp.com/tiny-renderer.git/geometry"
-	"code.groovestomp.com/tiny-renderer.git/texture"
+	"code.groovestomp.com/tiny-renderer/color"
+	"code.groovestomp.com/tiny-renderer/geometry"
+	"code.groovestomp.com/tiny-renderer/texture"
 )
 
 var LIGHT_DIR = geometry.Vector3{0, 0, -1}

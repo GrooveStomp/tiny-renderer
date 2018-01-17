@@ -1,7 +1,7 @@
 package texture
 
 import (
-	gscolor "code.groovestomp.com/tiny-renderer.git/color"
+	gscolor "code.groovestomp.com/tiny-renderer/color"
 	"image/png"
 	"os"
 )
