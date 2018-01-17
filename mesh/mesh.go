@@ -3,7 +3,7 @@ package mesh
 import (
 	"bufio"
 	"fmt"
-	"github.com/GrooveStomp/tiny-renderer/geometry"
+	"code.groovestomp.com/tiny-renderer.git/geometry"
 	"io"
 	"os"
 	"regexp"
