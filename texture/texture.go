@@ -1,4 +1,4 @@
-package texture
+package texture // import "code.groovestomp.com/tiny-renderer/texture"
 
 import (
 	gscolor "code.groovestomp.com/tiny-renderer/color"

@@ -1,4 +1,4 @@
-package color
+package color //import "code.groovestomp.com/tiny-renderer/color"
 
 import (
 	"fmt"

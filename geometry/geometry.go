@@ -1,4 +1,4 @@
-package geometry
+package geometry // import "code.groovestomp.com/tiny-renderer/geometry"
 
 import (
 	"fmt"

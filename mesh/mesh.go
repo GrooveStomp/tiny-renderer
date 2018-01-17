@@ -1,4 +1,4 @@
-package mesh
+package mesh // import "code.groovestomp.com/tiny-renderer/mesh"
 
 import (
 	"bufio"
